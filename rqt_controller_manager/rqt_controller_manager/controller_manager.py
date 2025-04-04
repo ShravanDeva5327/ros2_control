@@ -32,7 +32,13 @@ from controller_manager_msgs.srv import SwitchController
 from lifecycle_msgs.msg import State
 from python_qt_binding import loadUi
 from python_qt_binding.QtCore import QAbstractTableModel, Qt, QTimer
-from python_qt_binding.QtGui import QCursor, QFont, QIcon, QStandardItem, QStandardItemModel
+from python_qt_binding.QtGui import (
+    QCursor,
+    QFont,
+    QIcon,
+    QStandardItem,
+    QStandardItemModel,
+)
 from python_qt_binding.QtWidgets import QHeaderView, QMenu, QStyledItemDelegate, QWidget
 from qt_gui.plugin import Plugin
 from ros2param.api import call_get_parameters, call_list_parameters
@@ -64,7 +70,9 @@ class ControllerManager(Plugin):
         # Pop-up that displays controller information
         self._popup_widget = QWidget()
         ui_file = os.path.join(
-            get_package_share_directory("rqt_controller_manager"), "resource", "popup_info.ui"
+            get_package_share_directory("rqt_controller_manager"),
+            "resource",
+            "popup_info.ui",
         )
         loadUi(ui_file, self._popup_widget)
         self._popup_widget.setObjectName("ControllerInfoUi")
@@ -291,6 +299,17 @@ class ControllerManager(Plugin):
             hw_iface_item = QStandardItem(claimed_interface)
             model_root.appendRow(hw_iface_item)
 
+        # Add update rate and async information
+        if hasattr(ctrl, "update_rate"):
+            model_root = QStandardItem("Properties")
+            res_model.appendRow(model_root)
+
+            update_rate_item = QStandardItem(f"Update Rate: {ctrl.update_rate} Hz")
+            model_root.appendRow(update_rate_item)
+
+            is_async_item = QStandardItem(f"Is Async: {ctrl.is_async}")
+            model_root.appendRow(is_async_item)
+
         popup.resource_tree.setModel(res_model)
         popup.resource_tree.setItemDelegate(FontDelegate(popup.resource_tree))
         popup.resource_tree.expandAll()
@@ -496,7 +515,7 @@ class ControllerTable(QAbstractTableModel):
         return len(self._data)
 
     def columnCount(self, parent):
-        return 2
+        return 4  # Updated to include update_rate and is_async columns
 
     def headerData(self, col, orientation, role):
         if orientation != Qt.Horizontal or role != Qt.DisplayRole:
@@ -505,6 +524,10 @@ class ControllerTable(QAbstractTableModel):
             return "controller"
         elif col == 1:
             return "state"
+        elif col == 2:
+            return "update rate (Hz)"
+        elif col == 3:
+            return "async"
 
     def data(self, index, role):
         if not index.isValid():
@@ -517,6 +540,10 @@ class ControllerTable(QAbstractTableModel):
                 return ctrl.name
             elif index.column() == 1:
                 return ctrl.state or "unloaded"
+            elif index.column() == 2:
+                return str(ctrl.update_rate) if hasattr(ctrl, "update_rate") else "N/A"
+            elif index.column() == 3:
+                return str(ctrl.is_async) if hasattr(ctrl, "is_async") else "N/A"
 
         if role == Qt.DecorationRole and index.column() == 0:
             state_key = ctrl.state if ctrl.state else "unloaded"
@@ -527,8 +554,11 @@ class ControllerTable(QAbstractTableModel):
             bf.setBold(True)
             return bf
 
-        if role == Qt.TextAlignmentRole and index.column() == 1:
-            return Qt.AlignCenter
+        if role == Qt.TextAlignmentRole:
+            if index.column() == 1:
+                return Qt.AlignCenter
+            elif index.column() in (2, 3):
+                return Qt.AlignCenter
 
 
 class HwComponentTable(QAbstractTableModel):
